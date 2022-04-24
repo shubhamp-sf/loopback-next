@@ -12,7 +12,8 @@
 
 const path = require('path');
 const fs = require('fs-extra');
-const debug = require('debug')('loopback:monorepo');
+const gitInfo = require('hosted-git-info');
+const debugFactory = require('debug');
 const {
   isDryRun,
   isTypeScriptPackage,
@@ -24,6 +25,8 @@ const {
   printJson,
   runMain,
 } = require('./script-util');
+
+const debug = debugFactory('loopback:monorepo');
 
 const orderedPkgProperties = [
   'name',
@@ -59,8 +62,7 @@ const orderedPkgProperties = [
  */
 async function updatePackageJsonFiles(options) {
   const {project, packages} = await loadLernaRepo();
-  const rootPath = project.rootPath;
-  const rootPkg = fs.readJsonSync(path.join(rootPath, 'package.json'));
+  const rootPkg = fs.readJsonSync(path.join(project.rootPath, 'package.json'));
 
   let changed = false;
   for (const p of packages) {
@@ -84,8 +86,12 @@ async function updatePackageJsonFiles(options) {
     pkg.license = rootPkg.license;
 
     pkg.repository = {
-      type: rootPkg.repository.type,
-      url: rootPkg.repository.url,
+      type: rootPkg.repository.type ?? 'git',
+      get url() {
+        if (typeof rootPkg.repository !== 'string')
+          return rootPkg.repository.url;
+        return gitInfo.fromUrl(rootPkg.repository, {noGitPlus: true}).https();
+      },
       directory: path.relative(p.rootPath, p.location).replace(/\\/g, '/'),
     };
 
